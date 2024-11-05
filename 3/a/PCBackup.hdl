@@ -1,0 +1,9 @@
+   Mux16(a=currentState, b=false, sel=reset, out=resetCHECK);
+   Mux16(a=resetCHECK, b=in, sel=load, out=loadCHECK);
+   Inc16(in=loadCHECK, out=incremented);
+   Mux16(a=loadCHECK, b=incremented, sel=inc, out=checked);
+   //check to load
+   Or(a=inc, b=load, out=or1);
+   Or(a=or1, b=reset, out=loadReg);
+   Register(in=checked, load=loadReg, out=out, out=currentState);
+   

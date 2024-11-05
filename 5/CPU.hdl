@@ -1,0 +1,107 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    //Per schematic
+    // Tests passed
+
+    //instruction parsing
+    Mux16(a=false, b=instruction, 
+        sel=instruction[15], 
+        out[0]=cJGT,
+        out[1]=cJEQ,
+        out[2]=cJLT,
+        out[3]=cDestM,
+        out[3]=writeM,
+        out[4]=cDestD,
+        out[5]=cDestA,
+        out[6]=cALUno,
+        out[7]=cALUf,
+        out[8]=cALUny,
+        out[9]=cALUzy,
+        out[10]=cALUnx,
+        out[11]=cALUzx,
+        out[12]=cMUXtoY, 
+        out[13]=discard1,
+        out[14]=discard2,
+        out[15]=opCode  
+        );
+
+// A register feed
+    Mux16(a=instruction, b=outALU, sel=opCode, out=outMuxA);
+    Mux16(a=outRegA, b=inM, sel=cMUXtoY, out=yFeed); 
+    //NOT SURE ABOUT OR for loading A
+    Not(in=opCode, out=notOpCode);
+    Or(a=notOpCode, b=cDestA , out=loadA);    
+    ARegister(in=outMuxA, load=loadA, out=outRegA, out[0..14]=addressM);
+
+// D register feed
+    DRegister(in=outALU, load=cDestD, out=xFeed);
+
+// ALU
+    ALU(x=xFeed, 
+        y=yFeed, 
+        zx=cALUzx, 
+        nx=cALUnx, 
+        zy=cALUzy, 
+        ny=cALUny, 
+        f=cALUf, 
+        no=cALUno, 
+        out=outALU, 
+        out=outM, 
+        zr=zrFlag, 
+        ng=ngFlag
+        );
+// CONDITIONAL BLOCK
+    //pos flag (if ng & zr == 0 then pos=1)
+    Not(in=ngFlag, out=notNgFlag);
+    Not(in=zrFlag, out=notZrFlag);
+    And(a=notNgFlag, b=notZrFlag, out=posFlag);
+    //JEQ instr[1] jmp if out ==0
+    And(a=zrFlag, b=cJEQ, out=JEQ);
+    //JLT instr[2] jmp if out < 0
+    And(a=ngFlag, b=cJLT, out=JLT);
+    //JGT instr[0] jmp if out > 0
+    And(a=posFlag, b=cJGT, out=JGT);
+    //OR output to get the remaining conditions
+    Or(a=JEQ, b=JLT, out=JLE);
+    Or(a=JLE, b=JGT, out=jumpEVAL);
+
+// PC
+    PC(in=outRegA, load=jumpEVAL, inc=true, reset=reset, out[15]=removed, out[0..14]=pc);
+
+
+}
+
+
+
